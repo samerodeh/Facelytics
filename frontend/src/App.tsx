@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/auth';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -18,9 +19,9 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const AppContent: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col">
       <Header />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto w-full flex-1 px-4 py-10 sm:py-14">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" />} />
           <Route 
@@ -49,6 +50,12 @@ const AppContent: React.FC = () => {
           />
         </Routes>
       </main>
+      <footer className="border-t border-line/60 py-6">
+        <div className="container mx-auto flex flex-col items-center justify-between gap-2 px-4 text-xs text-content-faint sm:flex-row">
+          <span className="font-mono tracking-wide">FACELYTICS · BIOMETRIC ENGINE</span>
+          <span className="font-mono">InsightFace · buffalo_l</span>
+        </div>
+      </footer>
     </div>
   );
 };

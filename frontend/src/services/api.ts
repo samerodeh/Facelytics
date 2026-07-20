@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8010';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -21,9 +21,15 @@ export interface UserLogin {
   password: string;
 }
 
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string;
+}
+
 export interface AuthResponse {
   message: string;
-  user?: any;
+  user?: AuthUser;
 }
 
 // Face embedding interfaces

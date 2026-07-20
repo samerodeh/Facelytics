@@ -6,15 +6,23 @@ interface LoadingButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
   type?: 'button' | 'submit' | 'reset';
+  variant?: 'primary' | 'danger' | 'ghost';
   className?: string;
   disabled?: boolean;
 }
+
+const variantClass: Record<NonNullable<LoadingButtonProps['variant']>, string> = {
+  primary: 'btn-primary',
+  danger: 'btn-danger',
+  ghost: 'btn-ghost',
+};
 
 const LoadingButton: React.FC<LoadingButtonProps> = ({
   isLoading,
   children,
   onClick,
   type = 'button',
+  variant = 'primary',
   className = '',
   disabled = false,
 }) => {
@@ -23,9 +31,9 @@ const LoadingButton: React.FC<LoadingButtonProps> = ({
       type={type}
       onClick={onClick}
       disabled={isLoading || disabled}
-      className={`flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`btn ${variantClass[variant]} ${className}`}
     >
-      {isLoading && <Loader2 size={20} className="animate-spin" />}
+      {isLoading && <Loader2 size={18} className="animate-spin" />}
       <span>{children}</span>
     </button>
   );

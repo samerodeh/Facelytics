@@ -2,19 +2,16 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, UserRegister } from '../services/api';
 import LoadingButton from '../components/LoadingButton';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, UserPlus } from 'lucide-react';
+import { getErrorMessage } from '../utils/http';
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState<UserRegister>({
-    username: '',
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState<UserRegister>({ username: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,50 +28,48 @@ const RegisterPage: React.FC = () => {
 
     try {
       await authAPI.register(formData);
-      setSuccess('Account created successfully! You can now sign in.');
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      setSuccess('Account created successfully! Redirecting to sign in…');
+      setTimeout(() => navigate('/login'), 1800);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Registration failed. Please try again.'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
-    <div className="max-w-md mx-auto">
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
-          Create Your Account
-        </h2>
+    <div className="mx-auto max-w-md animate-fade-up">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-accent/40 bg-accent-glow">
+          <UserPlus size={26} className="text-accent" />
+        </div>
+        <p className="eyebrow">Get Started</p>
+        <h1 className="mt-2 font-display text-3xl font-700 text-content">Create your account</h1>
+        <p className="mt-2 text-sm text-content-muted">Join Facelytics in a few seconds.</p>
+      </div>
 
+      <div className="panel p-8">
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
-            <AlertCircle size={20} className="text-red-500 mt-0.5" />
-            <span className="text-red-700 text-sm">{error}</span>
+          <div className="mb-6 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-bg p-4">
+            <AlertCircle size={18} className="mt-0.5 shrink-0 text-danger" />
+            <span className="text-sm text-danger-soft">{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start space-x-2">
-            <CheckCircle size={20} className="text-green-500 mt-0.5" />
-            <span className="text-green-700 text-sm">{success}</span>
+          <div className="mb-6 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent-glow p-4">
+            <CheckCircle size={18} className="mt-0.5 shrink-0 text-accent" />
+            <span className="text-sm text-accent-soft">{success}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-              Username
-            </label>
+            <label htmlFor="username" className="field-label">Username</label>
             <input
               type="text"
               id="username"
@@ -82,15 +77,13 @@ const RegisterPage: React.FC = () => {
               value={formData.username}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Enter your username"
+              className="field-input"
+              placeholder="jane_doe"
             />
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
+            <label htmlFor="email" className="field-label">Email Address</label>
             <input
               type="email"
               id="email"
@@ -98,15 +91,13 @@ const RegisterPage: React.FC = () => {
               value={formData.email}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Enter your email"
+              className="field-input"
+              placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
+            <label htmlFor="password" className="field-label">Password</label>
             <input
               type="password"
               id="password"
@@ -114,43 +105,35 @@ const RegisterPage: React.FC = () => {
               value={formData.password}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Create a password"
+              className="field-input"
+              placeholder="At least 6 characters"
             />
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-              Confirm Password
-            </label>
+            <label htmlFor="confirmPassword" className="field-label">Confirm Password</label>
             <input
               type="password"
               id="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Confirm your password"
+              className="field-input"
+              placeholder="Re-enter your password"
             />
           </div>
 
-          <LoadingButton
-            type="submit"
-            isLoading={isLoading}
-            className="w-full bg-primary-600 text-white hover:bg-primary-700"
-          >
+          <LoadingButton type="submit" isLoading={isLoading} className="w-full">
             Create Account
           </LoadingButton>
         </form>
 
-        <div className="mt-6 text-center">
-          <span className="text-sm text-gray-600">
-            Already have an account?{' '}
-            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
-              Sign in
-            </Link>
-          </span>
-        </div>
+        <p className="mt-6 text-center text-sm text-content-muted">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-accent hover:text-accent-soft">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

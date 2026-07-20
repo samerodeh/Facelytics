@@ -2,11 +2,54 @@ import React, { useEffect, useState } from 'react';
 import { embeddingAPI, ComparisonResponse, EmbeddingResponse, EmbeddingListResponse } from '../services/api';
 import FileUpload from '../components/FileUpload';
 import LoadingButton from '../components/LoadingButton';
-import { AlertCircle, CheckCircle, Users, UserCheck, GitCompare, Trash2 } from 'lucide-react';
+import { getErrorMessage } from '../utils/http';
+import {
+  AlertCircle,
+  CheckCircle,
+  UserPlus,
+  GitCompare,
+  Settings2,
+  Database,
+  RefreshCw,
+  Trash2,
+  Pencil,
+  ScanFace,
+  Gauge,
+} from 'lucide-react';
+
+type TabId = 'create' | 'compare' | 'manage' | 'list';
+type FeedbackMsg = { type: 'success' | 'error'; text: string } | null;
+
+const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
+  { id: 'create', label: 'Enroll Face', icon: UserPlus },
+  { id: 'compare', label: 'Compare', icon: GitCompare },
+  { id: 'manage', label: 'Manage', icon: Settings2 },
+  { id: 'list', label: 'Registry', icon: Database },
+];
+
+const Feedback: React.FC<{ feedback: FeedbackMsg }> = ({ feedback }) => {
+  if (!feedback) return null;
+  const ok = feedback.type === 'success';
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-xl border p-4 ${
+        ok ? 'border-accent/30 bg-accent-glow' : 'border-danger/30 bg-danger-bg'
+      }`}
+    >
+      {ok ? (
+        <CheckCircle size={18} className="mt-0.5 shrink-0 text-accent" />
+      ) : (
+        <AlertCircle size={18} className="mt-0.5 shrink-0 text-danger" />
+      )}
+      <span className={`text-sm ${ok ? 'text-accent-soft' : 'text-danger-soft'}`}>{feedback.text}</span>
+    </div>
+  );
+};
 
 const DashboardPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'create' | 'compare' | 'manage' | 'list'>('create');
-  // List embeddings state
+  const [activeTab, setActiveTab] = useState<TabId>('create');
+
+  // Registry
   const [embeddings, setEmbeddings] = useState<{ id: number; person_name: string }[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -16,61 +59,58 @@ const DashboardPage: React.FC = () => {
     setListError(null);
     try {
       const res: EmbeddingListResponse = await embeddingAPI.listEmbeddings();
-      if (res.success && res.embeddings) {
-        setEmbeddings(res.embeddings);
-      } else {
-        setListError(res.error || 'Failed to load embeddings');
-      }
-    } catch (e: any) {
-      setListError(e.response?.data?.detail || 'Failed to load embeddings');
+      if (res.success && res.embeddings) setEmbeddings(res.embeddings);
+      else setListError(res.error || 'Failed to load embeddings');
+    } catch (e) {
+      setListError(getErrorMessage(e, 'Failed to load embeddings'));
     } finally {
       setListLoading(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'list') {
-      loadEmbeddings();
-    }
-  }, [activeTab]);
-  
-  // Create embedding states
+    loadEmbeddings();
+  }, []);
+
+  // Create
   const [createFile, setCreateFile] = useState<File | null>(null);
   const [personName, setPersonName] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
-  const [createMessage, setCreateMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [createMessage, setCreateMessage] = useState<FeedbackMsg>(null);
 
-  // Compare faces states
+  // Compare
   const [compareFile1, setCompareFile1] = useState<File | null>(null);
   const [compareFile2, setCompareFile2] = useState<File | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareResult, setCompareResult] = useState<ComparisonResponse | null>(null);
 
-  // Manage embeddings states
+  // Manage
   const [deletePersonName, setDeletePersonName] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteMessage, setDeleteMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [renameFrom, setRenameFrom] = useState('');
+  const [renameTo, setRenameTo] = useState('');
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [manageMessage, setManageMessage] = useState<FeedbackMsg>(null);
 
   const handleCreateEmbedding = async () => {
     if (!createFile || !personName.trim()) {
-      setCreateMessage({ type: 'error', text: 'Please select a file and enter a person name.' });
+      setCreateMessage({ type: 'error', text: 'Please select an image and enter a person name.' });
       return;
     }
-
     setCreateLoading(true);
     setCreateMessage(null);
-
     try {
-      const response: EmbeddingResponse = await embeddingAPI.createEmbedding(createFile, personName.trim());
-      if (response.success) {
-        setCreateMessage({ type: 'success', text: response.message });
+      const res: EmbeddingResponse = await embeddingAPI.createEmbedding(createFile, personName.trim());
+      if (res.success) {
+        setCreateMessage({ type: 'success', text: res.message });
         setPersonName('');
         setCreateFile(null);
+        loadEmbeddings();
       } else {
-        setCreateMessage({ type: 'error', text: response.message });
+        setCreateMessage({ type: 'error', text: res.message });
       }
-    } catch (error: any) {
-      setCreateMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to create embedding.' });
+    } catch (error) {
+      setCreateMessage({ type: 'error', text: getErrorMessage(error, 'Failed to create embedding.') });
     } finally {
       setCreateLoading(false);
     }
@@ -81,18 +121,13 @@ const DashboardPage: React.FC = () => {
       setCompareResult({ match: false, message: 'Please select both images to compare.' });
       return;
     }
-
     setCompareLoading(true);
     setCompareResult(null);
-
     try {
-      const response: ComparisonResponse = await embeddingAPI.compareFaces(compareFile1, compareFile2);
-      setCompareResult(response);
-    } catch (error: any) {
-      setCompareResult({ 
-        match: false, 
-        message: error.response?.data?.detail || 'Failed to compare faces.' 
-      });
+      const res: ComparisonResponse = await embeddingAPI.compareFaces(compareFile1, compareFile2);
+      setCompareResult(res);
+    } catch (error) {
+      setCompareResult({ match: false, message: getErrorMessage(error, 'Failed to compare faces.') });
     } finally {
       setCompareLoading(false);
     }
@@ -100,219 +135,195 @@ const DashboardPage: React.FC = () => {
 
   const handleDeleteEmbedding = async () => {
     if (!deletePersonName.trim()) {
-      setDeleteMessage({ type: 'error', text: 'Please enter a person name to delete.' });
+      setManageMessage({ type: 'error', text: 'Enter a person name to delete.' });
       return;
     }
-
     setDeleteLoading(true);
-    setDeleteMessage(null);
-
+    setManageMessage(null);
     try {
-      const response: EmbeddingResponse = await embeddingAPI.deleteEmbedding(deletePersonName.trim());
-      if (response.success) {
-        setDeleteMessage({ type: 'success', text: response.message });
+      const res: EmbeddingResponse = await embeddingAPI.deleteEmbedding(deletePersonName.trim());
+      setManageMessage({
+        type: res.success ? 'success' : 'error',
+        text: res.message || res.error || 'Failed to delete embedding.',
+      });
+      if (res.success) {
         setDeletePersonName('');
-      } else {
-        setDeleteMessage({ type: 'error', text: response.message || response.error || 'Failed to delete embedding.' });
+        loadEmbeddings();
       }
-    } catch (error: any) {
-      setDeleteMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to delete embedding.' });
+    } catch (error) {
+      setManageMessage({ type: 'error', text: getErrorMessage(error, 'Failed to delete embedding.') });
     } finally {
       setDeleteLoading(false);
     }
   };
 
-  const tabs = [
-    { id: 'create', label: 'Create Embedding', icon: Users },
-    { id: 'compare', label: 'Compare Faces', icon: GitCompare },
-    { id: 'manage', label: 'Manage Embeddings', icon: UserCheck },
-    { id: 'list', label: 'Embeddings', icon: Users },
-  ];
+  const handleRenameEmbedding = async () => {
+    if (!renameFrom.trim() || !renameTo.trim()) {
+      setManageMessage({ type: 'error', text: 'Enter both the current and the new name.' });
+      return;
+    }
+    setRenameLoading(true);
+    setManageMessage(null);
+    try {
+      const res: EmbeddingResponse = await embeddingAPI.updateEmbedding(renameFrom.trim(), renameTo.trim());
+      setManageMessage({
+        type: res.success ? 'success' : 'error',
+        text: res.message || res.error || 'Failed to rename embedding.',
+      });
+      if (res.success) {
+        setRenameFrom('');
+        setRenameTo('');
+        loadEmbeddings();
+      }
+    } catch (error) {
+      setManageMessage({ type: 'error', text: getErrorMessage(error, 'Failed to rename embedding.') });
+    } finally {
+      setRenameLoading(false);
+    }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <nav className="flex">
+    <div className="mx-auto max-w-5xl animate-fade-up">
+      {/* Overview band */}
+      <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="eyebrow">Console</p>
+          <h1 className="mt-2 font-display text-3xl font-700 text-content sm:text-4xl">Recognition Dashboard</h1>
+          <p className="mt-2 max-w-lg text-sm text-content-muted">
+            Enroll faces, compare two images, and manage your biometric registry — all backed by InsightFace embeddings.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <div className="panel flex items-center gap-3 px-4 py-3">
+            <ScanFace size={20} className="text-accent" />
+            <div>
+              <p className="font-mono text-lg font-600 leading-none text-content">{embeddings.length}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-wider text-content-faint">Enrolled</p>
+            </div>
+          </div>
+          <div className="panel flex items-center gap-3 px-4 py-3">
+            <Gauge size={20} className="text-accent" />
+            <div>
+              <p className="font-mono text-lg font-600 leading-none text-content">0.60</p>
+              <p className="mt-1 text-[11px] uppercase tracking-wider text-content-faint">Threshold</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+        {/* Tab rail */}
+        <nav className="panel h-max p-2">
+          <ul className="flex gap-2 lg:flex-col">
             {tabs.map((tab) => {
               const Icon = tab.icon;
+              const active = activeTab === tab.id;
               return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-b-2 border-primary-500 text-primary-600 bg-primary-50'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <Icon size={20} />
-                  <span>{tab.label}</span>
-                </button>
+                <li key={tab.id} className="flex-1">
+                  <button
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-accent-glow text-accent'
+                        : 'text-content-muted hover:bg-surface-hover hover:text-content'
+                    }`}
+                  >
+                    <Icon size={18} className={active ? 'text-accent' : ''} />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                </li>
               );
             })}
-          </nav>
-        </div>
+          </ul>
+        </nav>
 
-        {/* Tab Content */}
-        <div className="p-8">
-          {/* Create Embedding Tab */}
+        {/* Content */}
+        <section className="panel p-6 sm:p-8">
           {activeTab === 'create' && (
             <div className="space-y-6">
+              <header>
+                <h2 className="font-display text-2xl font-700 text-content">Enroll a Face</h2>
+                <p className="mt-1 text-sm text-content-muted">Upload an image to store a face embedding under a name.</p>
+              </header>
+              <Feedback feedback={createMessage} />
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Face Embedding</h2>
-                <p className="text-gray-600">Upload an image to create a face embedding for a person.</p>
-              </div>
-
-              {createMessage && (
-                <div className={`p-4 rounded-lg flex items-start space-x-2 ${
-                  createMessage.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-                }`}>
-                  {createMessage.type === 'success' ? (
-                    <CheckCircle size={20} className="text-green-500 mt-0.5" />
-                  ) : (
-                    <AlertCircle size={20} className="text-red-500 mt-0.5" />
-                  )}
-                  <span className={`text-sm ${
-                    createMessage.type === 'success' ? 'text-green-700' : 'text-red-700'
-                  }`}>
-                    {createMessage.text}
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Person Name
-                </label>
+                <label className="field-label">Person Name</label>
                 <input
                   type="text"
                   value={personName}
                   onChange={(e) => setPersonName(e.target.value)}
-                  placeholder="Enter person's name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="e.g. Ada Lovelace"
+                  className="field-input"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload Image
-                </label>
+                <label className="field-label">Face Image</label>
                 <FileUpload onFileSelect={setCreateFile} />
               </div>
-
-              <LoadingButton
-                onClick={handleCreateEmbedding}
-                isLoading={createLoading}
-                className="bg-primary-600 text-white hover:bg-primary-700"
-              >
-                Create Embedding
+              <LoadingButton onClick={handleCreateEmbedding} isLoading={createLoading}>
+                <UserPlus size={18} />
+                Enroll Face
               </LoadingButton>
             </div>
           )}
 
-          {/* List Embeddings Tab */}
-          {activeTab === 'list' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Embeddings</h2>
-                  <p className="text-gray-600">All saved person names in the database.</p>
-                </div>
-                <button
-                  onClick={loadEmbeddings}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {listError && (
-                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                  {listError}
-                </div>
-              )}
-
-              {listLoading ? (
-                <div className="text-gray-500">Loading...</div>
-              ) : embeddings.length === 0 ? (
-                <div className="text-gray-500">No embeddings found.</div>
-              ) : (
-                <ul className="divide-y divide-gray-200 bg-white rounded-lg border">
-                  {embeddings.map((e) => (
-                    <li key={e.id} className="px-4 py-3 flex items-center justify-between">
-                      <span className="text-gray-800">{e.person_name}</span>
-                      <span className="text-xs text-gray-400">ID: {e.id}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          {/* Compare Faces Tab */}
           {activeTab === 'compare' && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Compare Faces</h2>
-                <p className="text-gray-600">Upload two images to compare if they contain the same person.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <header>
+                <h2 className="font-display text-2xl font-700 text-content">Compare Faces</h2>
+                <p className="mt-1 text-sm text-content-muted">Upload two images to check whether they show the same person.</p>
+              </header>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    First Image
-                  </label>
+                  <label className="field-label">First Image</label>
                   <FileUpload onFileSelect={setCompareFile1} />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Second Image
-                  </label>
+                  <label className="field-label">Second Image</label>
                   <FileUpload onFileSelect={setCompareFile2} />
                 </div>
               </div>
-
-              <LoadingButton
-                onClick={handleCompareFaces}
-                isLoading={compareLoading}
-                className="bg-primary-600 text-white hover:bg-primary-700"
-              >
+              <LoadingButton onClick={handleCompareFaces} isLoading={compareLoading}>
+                <GitCompare size={18} />
                 Compare Faces
               </LoadingButton>
 
               {compareResult && (
-                <div className={`p-6 rounded-lg border-2 ${
-                  compareResult.match 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div className="flex items-center space-x-3">
-                    {compareResult.match ? (
-                      <CheckCircle size={24} className="text-green-500" />
-                    ) : (
-                      <AlertCircle size={24} className="text-red-500" />
-                    )}
-                    <div>
-                      <h3 className={`font-semibold ${
-                        compareResult.match ? 'text-green-800' : 'text-red-800'
-                      }`}>
-                        {compareResult.match ? 'Match Found!' : 'No Match'}
+                <div
+                  className={`rounded-2xl border p-6 ${
+                    compareResult.match ? 'border-accent/40 bg-accent-glow' : 'border-danger/30 bg-danger-bg'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span
+                      className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${
+                        compareResult.match ? 'bg-accent/20 text-accent' : 'bg-danger/20 text-danger'
+                      }`}
+                    >
+                      {compareResult.match ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
+                    </span>
+                    <div className="flex-1">
+                      <h3 className={`font-display text-lg font-700 ${compareResult.match ? 'text-accent' : 'text-danger-soft'}`}>
+                        {compareResult.match ? 'Match Found' : 'No Match'}
                       </h3>
-                      {compareResult.similarity !== undefined && (
-                        <p className={`text-sm ${
-                          compareResult.match ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          Similarity: {(compareResult.similarity * 100).toFixed(1)}%
-                        </p>
-                      )}
                       {compareResult.message && (
-                        <p className={`text-sm ${
-                          compareResult.match ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {compareResult.message}
-                        </p>
+                        <p className="text-sm text-content-muted">{compareResult.message}</p>
+                      )}
+                      {compareResult.similarity !== undefined && (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between font-mono text-xs text-content-muted">
+                            <span>Similarity</span>
+                            <span className={compareResult.match ? 'text-accent' : 'text-danger-soft'}>
+                              {(compareResult.similarity * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink">
+                            <div
+                              className={`h-full rounded-full ${compareResult.match ? 'bg-accent' : 'bg-danger'}`}
+                              style={{ width: `${Math.max(0, Math.min(100, compareResult.similarity * 100))}%` }}
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -321,55 +332,102 @@ const DashboardPage: React.FC = () => {
             </div>
           )}
 
-          {/* Manage Embeddings Tab */}
           {activeTab === 'manage' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Manage Embeddings</h2>
-                <p className="text-gray-600">Delete existing face embeddings from the database.</p>
+            <div className="space-y-8">
+              <header>
+                <h2 className="font-display text-2xl font-700 text-content">Manage Registry</h2>
+                <p className="mt-1 text-sm text-content-muted">Rename or delete stored face embeddings.</p>
+              </header>
+              <Feedback feedback={manageMessage} />
+
+              <div className="rounded-2xl border border-line bg-ink/40 p-5">
+                <h3 className="mb-4 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-content-muted">
+                  <Pencil size={14} /> Rename
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    value={renameFrom}
+                    onChange={(e) => setRenameFrom(e.target.value)}
+                    placeholder="Current name"
+                    className="field-input"
+                  />
+                  <input
+                    type="text"
+                    value={renameTo}
+                    onChange={(e) => setRenameTo(e.target.value)}
+                    placeholder="New name"
+                    className="field-input"
+                  />
+                </div>
+                <LoadingButton onClick={handleRenameEmbedding} isLoading={renameLoading} variant="ghost" className="mt-4">
+                  <Pencil size={16} />
+                  Rename Embedding
+                </LoadingButton>
               </div>
 
-              {deleteMessage && (
-                <div className={`p-4 rounded-lg flex items-start space-x-2 ${
-                  deleteMessage.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-                }`}>
-                  {deleteMessage.type === 'success' ? (
-                    <CheckCircle size={20} className="text-green-500 mt-0.5" />
-                  ) : (
-                    <AlertCircle size={20} className="text-red-500 mt-0.5" />
-                  )}
-                  <span className={`text-sm ${
-                    deleteMessage.type === 'success' ? 'text-green-700' : 'text-red-700'
-                  }`}>
-                    {deleteMessage.text}
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Person Name to Delete
-                </label>
+              <div className="rounded-2xl border border-danger/20 bg-danger-bg/40 p-5">
+                <h3 className="mb-4 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-danger-soft">
+                  <Trash2 size={14} /> Delete
+                </h3>
                 <input
                   type="text"
                   value={deletePersonName}
                   onChange={(e) => setDeletePersonName(e.target.value)}
-                  placeholder="Enter person's name to delete their embedding"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  placeholder="Name to delete"
+                  className="field-input focus:border-danger/60 focus:ring-danger/25"
                 />
+                <LoadingButton onClick={handleDeleteEmbedding} isLoading={deleteLoading} variant="danger" className="mt-4">
+                  <Trash2 size={16} />
+                  Delete Embedding
+                </LoadingButton>
               </div>
-
-              <LoadingButton
-                onClick={handleDeleteEmbedding}
-                isLoading={deleteLoading}
-                className="bg-red-600 text-white hover:bg-red-700"
-              >
-                <Trash2 size={20} />
-                Delete Embedding
-              </LoadingButton>
             </div>
           )}
-        </div>
+
+          {activeTab === 'list' && (
+            <div className="space-y-6">
+              <header className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl font-700 text-content">Registry</h2>
+                  <p className="mt-1 text-sm text-content-muted">All enrolled identities in the database.</p>
+                </div>
+                <button onClick={loadEmbeddings} className="btn btn-ghost px-4 py-2 text-sm">
+                  <RefreshCw size={16} className={listLoading ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              </header>
+
+              {listError && (
+                <div className="rounded-xl border border-danger/30 bg-danger-bg p-4 text-sm text-danger-soft">{listError}</div>
+              )}
+
+              {listLoading ? (
+                <div className="py-12 text-center font-mono text-sm text-content-faint">Loading registry…</div>
+              ) : embeddings.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line py-12 text-center">
+                  <Database size={28} className="mx-auto mb-3 text-content-faint" />
+                  <p className="text-sm text-content-muted">No faces enrolled yet.</p>
+                </div>
+              ) : (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {embeddings.map((e) => (
+                    <li
+                      key={e.id}
+                      className="flex items-center gap-3 rounded-xl border border-line bg-ink/40 px-4 py-3 transition-colors hover:border-line-strong"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-glow font-display text-sm font-700 text-accent">
+                        {e.person_name.charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-content">{e.person_name}</span>
+                      <span className="font-mono text-xs text-content-faint">#{e.id}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

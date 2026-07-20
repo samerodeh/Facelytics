@@ -1,99 +1,87 @@
-from fastapi import APIRouter, UploadFile, File, Form
-import shutil
-import numpy as np
+import logging
 import os
+import shutil
 import uuid
+from contextlib import contextmanager
 
-from utils import face
-from models.schemas import UserEmbeddings
-from utils.face import get_embedding, cosine_similarity
-from db.db import insert_embedding, delete_embedding as db_delete_embedding, embedding_exists, list_embeddings
+import numpy as np
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+
+from config import settings
+from db.db import (
+    delete_embedding as db_delete_embedding,
+    embedding_exists,
+    insert_embedding,
+    list_embeddings,
+    rename_embedding,
+)
+from utils.face import cosine_similarity, get_embedding
+
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["embeddings"])
+
+TEMP_DIR = "temp_images"
 
 
-router = APIRouter()
+@contextmanager
+def saved_upload(file: UploadFile):
+    """Persist an upload to a temp file and guarantee cleanup afterwards."""
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1] or ".jpg"
+    path = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}{ext}")
+    try:
+        with open(path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        yield path
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 @router.post("/create-embedding")
-async def get_face_embedding(file: UploadFile = File(...), name: str = Form("unknown")):
-    os.makedirs("temp_images", exist_ok=True)
-    ext = os.path.splitext(file.filename or "")[1] or ".jpg"
-    temp_path = f"temp_images/{uuid.uuid4().hex}{ext}"
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+async def create_embedding(file: UploadFile = File(...), name: str = Form("unknown")):
+    if embedding_exists(name):
+        return {"success": False, "message": f"Embedding for '{name}' already exists"}
 
-    embedding = get_embedding(temp_path)
+    with saved_upload(file) as path:
+        embedding = get_embedding(path)
+
     if embedding is None:
         return {"success": False, "message": "No face detected"}
 
-    # Check if embedding for this person_name already exists
-    if embedding_exists(name):
-        return {"success": False, "message": f"Embedding for {name} already exists"}
-
-    # Save embedding to DB
     insert_embedding(name, embedding)
-
-    # Clean up temp file
-    try:
-        os.remove(temp_path)
-    except:
-        pass
-
-    return {"success": True, "embedding": embedding, "message": f"Embedding saved for {name}"}
+    return {"success": True, "message": f"Embedding saved for '{name}'"}
 
 
-
-
-@router.delete('/delete-embedding')
+@router.delete("/delete-embedding")
 def delete_embedding(person_name: str):
+    if db_delete_embedding(person_name):
+        return {"success": True, "message": f"Embedding deleted for '{person_name}'"}
+    return {"success": False, "message": f"No embedding found for '{person_name}'"}
 
-    # if !embedding_exists(person_name):
-    #     return {"success": False, "message": f"Embedding for {person_name} does not exist"}
-    try:
-        db_delete_embedding(person_name)
-        return {"success": True, "message": f"Embedding deleted for {person_name}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    
 
-@router.put('/update-embedding')
+@router.put("/update-embedding")
 def update_embedding(person_name: str, new_person_name: str):
-        try:
-            update_embedding(person_name, new_person_name)
-            return {"success": True, "message": f"Embedding updated for {person_name}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-        
+    if rename_embedding(person_name, new_person_name):
+        return {"success": True, "message": f"Embedding renamed to '{new_person_name}'"}
+    return {"success": False, "message": f"No embedding found for '{person_name}'"}
+
 
 @router.post("/compare-faces")
 async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(...)):
-    os.makedirs("temp_images", exist_ok=True)
-    ext1 = os.path.splitext(file1.filename or "")[1] or ".jpg"
-    ext2 = os.path.splitext(file2.filename or "")[1] or ".jpg"
-    path1, path2 = f"temp_images/{uuid.uuid4().hex}{ext1}", f"temp_images/{uuid.uuid4().hex}{ext2}"
-    with open(path1, "wb") as f: shutil.copyfileobj(file1.file, f)
-    with open(path2, "wb") as f: shutil.copyfileobj(file2.file, f)
+    with saved_upload(file1) as path1, saved_upload(file2) as path2:
+        emb1 = get_embedding(path1)
+        emb2 = get_embedding(path2)
 
-    emb1 = get_embedding(path1)
-    emb2 = get_embedding(path2)
-
-    # Clean up temporary files
-    try:
-        os.remove(path1)
-        os.remove(path2)
-    except:
-        pass
-
-    if not emb1 or not emb2:
-        return {"match": False, "message": "Face not detected"}
+    if emb1 is None or emb2 is None:
+        return {"match": False, "message": "Face not detected in one or both images"}
 
     score = cosine_similarity(np.array(emb1), np.array(emb2))
-    return {"match": bool(score > 0.6), "similarity": float(score)}
+    return {"match": bool(score > settings.face_match_threshold), "similarity": score}
 
 
-@router.get('/embeddings')
+@router.get("/embeddings")
 def get_embeddings():
-    try:
-        data = list_embeddings()
-        return {"success": True, "embeddings": data}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    return {"success": True, "embeddings": list_embeddings()}

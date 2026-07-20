@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, Square, RotateCcw, X } from 'lucide-react';
+import { Camera, Circle, RotateCcw, X } from 'lucide-react';
 
 interface CameraCaptureProps {
   onCapture: (file: File) => void;
@@ -7,11 +7,7 @@ interface CameraCaptureProps {
   className?: string;
 }
 
-const CameraCapture: React.FC<CameraCaptureProps> = ({
-  onCapture,
-  onClose,
-  className = '',
-}) => {
+const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose, className = '' }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -21,22 +17,15 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
   useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-    };
+    return () => stopCamera();
   }, []);
 
   const startCamera = async () => {
     try {
       setError(null);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        }
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
       });
-      
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -53,7 +42,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
   const stopCamera = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setIsStreaming(false);
@@ -61,144 +50,103 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-
     if (!context) return;
 
-    // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
-    // Draw the video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert canvas to blob and create file
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], 'camera-capture.jpg', {
-          type: 'image/jpeg',
-          lastModified: Date.now()
-        });
-        
-        // Create preview URL
-        const imageUrl = URL.createObjectURL(blob);
-        setCapturedImage(imageUrl);
-        
-        // Stop camera after capture
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+        setCapturedImage(URL.createObjectURL(blob));
         stopCamera();
-        
-        // Call the onCapture callback
         onCapture(file);
-      }
-    }, 'image/jpeg', 0.8);
+      },
+      'image/jpeg',
+      0.9,
+    );
   };
 
   const retakePhoto = () => {
+    if (capturedImage) URL.revokeObjectURL(capturedImage);
     setCapturedImage(null);
-    if (capturedImage) {
-      URL.revokeObjectURL(capturedImage);
-    }
     startCamera();
   };
 
   const handleClose = () => {
     stopCamera();
-    if (capturedImage) {
-      URL.revokeObjectURL(capturedImage);
-    }
+    if (capturedImage) URL.revokeObjectURL(capturedImage);
     onClose();
   };
 
   return (
-    <div className={`fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 ${className}`}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Take Photo</h3>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <X size={20} className="text-gray-500" />
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-4 backdrop-blur-sm ${className}`}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="panel w-full max-w-md p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="font-display text-lg font-700 text-content">Capture Photo</h3>
+          <button onClick={handleClose} className="rounded-lg p-2 text-content-muted transition-colors hover:bg-surface-hover hover:text-content" aria-label="Close">
+            <X size={20} />
           </button>
         </div>
 
         {error ? (
-          <div className="text-center py-8">
-            <div className="text-red-500 mb-4">
-              <Camera size={48} className="mx-auto mb-2" />
-              <p className="text-sm">{error}</p>
-            </div>
-            <button
-              onClick={startCamera}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
+          <div className="py-8 text-center">
+            <Camera size={44} className="mx-auto mb-3 text-danger" />
+            <p className="mb-5 text-sm text-danger-soft">{error}</p>
+            <button onClick={startCamera} className="btn btn-primary mx-auto">
               Try Again
             </button>
           </div>
         ) : capturedImage ? (
           <div className="text-center">
-            <div className="mb-4">
-              <img
-                src={capturedImage}
-                alt="Captured"
-                className="max-w-full h-auto rounded-lg border border-gray-200"
-              />
-            </div>
-            <div className="flex space-x-3 justify-center">
-              <button
-                onClick={retakePhoto}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
+            <img src={capturedImage} alt="Captured" className="mb-5 w-full rounded-xl border border-line" />
+            <div className="flex justify-center gap-3">
+              <button onClick={retakePhoto} className="btn btn-ghost">
                 <RotateCcw size={16} />
-                <span>Retake</span>
+                Retake
               </button>
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
+              <button onClick={handleClose} className="btn btn-primary">
                 Use Photo
               </button>
             </div>
           </div>
         ) : (
           <div className="text-center">
-            <div className="mb-4">
-              <video
-                ref={videoRef}
-                className="w-full h-auto rounded-lg border border-gray-200"
-                playsInline
-                muted
-              />
-              <canvas
-                ref={canvasRef}
-                className="hidden"
-              />
-            </div>
-            
-            {isStreaming && (
-              <button
-                onClick={capturePhoto}
-                className="flex items-center space-x-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors mx-auto"
-              >
-                <Square size={20} />
-                <span>Capture Photo</span>
-              </button>
-            )}
-            
-            {!isStreaming && !error && (
-              <div className="text-gray-500 text-sm">
-                Loading camera...
+            <div className="relative mb-5 overflow-hidden rounded-xl border border-line">
+              <video ref={videoRef} className="w-full" playsInline muted />
+              {/* Framing guide + scan line */}
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute left-1/2 top-1/2 h-40 w-32 -translate-x-1/2 -translate-y-1/2 rounded-[45%] border-2 border-accent/50" />
+                {isStreaming && (
+                  <div className="absolute inset-x-0 top-0 h-1/2 animate-scan bg-gradient-to-b from-accent/20 to-transparent" />
+                )}
               </div>
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+
+            {isStreaming ? (
+              <button onClick={capturePhoto} className="btn btn-primary mx-auto">
+                <Circle size={18} />
+                Capture
+              </button>
+            ) : (
+              <div className="py-2 font-mono text-sm text-content-faint">Initializing camera…</div>
             )}
           </div>
         )}
 
-        <div className="mt-4 text-xs text-gray-500 text-center">
-          Position your face in the center of the frame for best results
-        </div>
+        <p className="mt-4 text-center font-mono text-[11px] uppercase tracking-wider text-content-faint">
+          Center your face in the frame
+        </p>
       </div>
     </div>
   );
